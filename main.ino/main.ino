@@ -94,7 +94,7 @@ void setup() {
   analogReadResolution(12);
   analogSetAttenuation(ADC_11db);
   connectWiFi();
-  Serial.println("Succulent monitor running.");
+  Serial.println("success!!.");
 }
 
 
