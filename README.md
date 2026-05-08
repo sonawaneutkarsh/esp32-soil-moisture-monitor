@@ -1,10 +1,10 @@
 # This was a hobby project, wanted to mess with electronics
 # items required
-1. ESP 32(i did this with ESP32 C3 super mini)
+1. ESP 32 (i did this with ESP32 C3 super mini)
 2. mb102 power supply board
 3. breadboard
 4. capacitive soil moisture sensor V.2.0.0 with female ends
-5. jumper wires(6 male to male)
+5. jumper wires  (6 male to male)
 6. barrel jack with wall adapter or a battery source
 7. usb type c 
 8. plants
@@ -19,7 +19,7 @@ download files into folder and open in Arduino IDE
 
 # esp32 board support
 1. open Arduino IDE, go to settings
-2. click on "Additional boards manager URLs"
+2. click on Additional boards manager URLs
 3. paste "https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json" and click ok
 4. go to tools, board, boards manager
 5. search esp32 and click 'esp32 by Espressif Systems'
@@ -45,7 +45,7 @@ ESP32 3V3   → 3.3V rail
 ESP32 GND   → GND rail
 ESP32 GPIO1 → leave the other loose
 
-in dummies, google the esp32 c3 super mini pinout and follow, i like this one (![](assets/image.png) (for rail connections, it doesn't matter where u plug it, plug it anywhere):
+in dummies, google the esp32 c3 super mini pinout and follow, i like this one ![esp 32 connections](assets/image.png) (for rail connections, it doesn't matter where u plug it, plug it anywhere):  
 esp 32 connections: 
 1. yellow → GPI01
 2. red → +ve rail to 3V3
@@ -59,14 +59,14 @@ connect jumper wires color to the female exposed ends with the right color, and 
 
 # next steps
 1. put jumper cap on 3.3V on both sides for the power supply, too much voltage can damage our esp32!!
-2. ![](assets/connections.JPG "connections on my breadboard")
+2. ![connections on my breadboard](assets/connections.JPG "connections on my breadboard")
 3. confirm the connections work by plugging in the barrel jack/power source, two lights should light up, a green one on power supply board and red on esp32.
 
 # running the code
 1. open [moisture_calibrator.ino](moisture_calibrator/moisture_calibrator.ino)
 2. connect esp32 to laptop and click the right arrow at the top left to upload code
 3. it should read moisture levels correcly, calibrate for air, water, dry soil, wet soil. 
-4. depending on the plant, adjust moisture level in [main.ino](main.ino/main.ino) on line 25(i had succulents, so i chose a moisture level of 15 by accounting for air, water, dry soil, wet soil)
+4. depending on the plant, adjust moisture level in [main.ino](main.ino/main.ino) on line 25 (i had succulents, so i chose a moisture level of 15 by accounting for air, water, dry soil, wet soil)
 5. paste the avg of values you got while calibrating in line 21 and 22
 
 # final thoughts
@@ -84,5 +84,5 @@ i originally planned this to be an automatic watering system, but I needed a boo
 if you do plan to set this up, you would need a MOSFET, resistor and a motor too. To make things easier just get a L9110 motor board which includes all of them. don't forget to get a silicon tubing and TP4056 charging module to charge the 18650 via usb.
 
 # acknowledgement
-huge thanks to Mr. Terry, who provided me with all the materials for this hobby project. now my summer succulents can survive without me(still needs someone to water them :P)
+huge thanks to Mr. Terry, who provided me with all the materials for this hobby project. now my summer succulents can survive without me (still needs someone to water them :P)
 
