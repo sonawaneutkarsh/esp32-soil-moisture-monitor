@@ -1,4 +1,5 @@
-# This was a hobby project, wanted to mess with electronics
+# overview
+this was a hobby electronics project using an ESP32-C3 super mini to monitor soil moisture levels using a capacitive soil moisture sensor. The sensor reads soil data, calibrates values and logs moisture levels at regular intervals. 
 # items required
 1. ESP 32 (i did this with ESP32 C3 super mini)
 2. mb102 power supply board
