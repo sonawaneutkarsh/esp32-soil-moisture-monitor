@@ -2,7 +2,7 @@
 
 a small hobby electronics project using an esp32-c3 super mini and a capacitive soil moisture sensor to monitor the moisture level of a plant.
 
-the esp32 takes multiple sensor readings, averages them, converts the calibrated reading into a normalized 0–100 moisture scale, and checks it against a configurable threshold. if the moisture level falls below the threshold, the esp32 sends an email notification over wi-fi.
+the esp32 takes multiple sensor readings, averages them, converts the calibrated reading into a normalized 0–100 moisture value, and checks it against a configurable threshold. if the moisture level falls below the threshold, the esp32 sends an email notification over wi-fi.
 
 # features
 
@@ -41,7 +41,7 @@ the system works in the following steps:
 4. the resulting value is constrained to a normalized 0–100 scale.
 5. the moisture value is compared against `ALERT_BELOW_PCT`.
 6. if the moisture level is below the threshold, the esp32 sends an email alert.
-7. after an alert is sent, another alert is not sent until the soil recovers sufficiently.
+7. after an alert is sent, another alert is not sent until the moisture level recovers sufficiently.
 8. the first measurement is taken immediately after startup, followed by measurements at the configured interval.
 
 the 0–100 value is a relative scale based on the sensor's calibration points. it is not a direct measurement of volumetric water content.
@@ -141,8 +141,6 @@ for connections to the power rails, the exact breadboard position does not matte
 
 ![esp32 connections](assets/image.png)
 
-![breadboard connections](assets/connections.JPG)
-
 # powering the circuit
 
 > **important:** set the mb102 power supply to 3.3v before powering the circuit. supplying excessive voltage can damage the esp32-c3.
@@ -150,6 +148,8 @@ for connections to the power rails, the exact breadboard position does not matte
 after connecting the power source, the power indicators on the mb102 and esp32-c3 should turn on.
 
 the circuit can be powered using the barrel jack and a compatible wall adapter. battery operation is also possible, but the appropriate charging, protection, and voltage regulation circuitry should be used.
+
+![breadboard connections](assets/connections.JPG)
 
 # calibration
 
@@ -195,133 +195,4 @@ the result is constrained between 0 and 100.
 
 this means:
 
-* a reading near `DRY_VALUE` corresponds to approximately 0 on the normalized scale
-* a reading near `WET_VALUE` corresponds to approximately 100 on the normalized scale
-* readings between them are mapped proportionally
-
-# configuration
-
-the main settings can be changed in `main.ino`.
-
-## moisture threshold
-
-```cpp
-const int ALERT_BELOW_PCT = 15;
-```
-
-the esp32 sends an email alert when the normalized moisture value falls below this threshold.
-
-for my succulents, i used a threshold of 15 based on my calibration results and the moisture level i wanted to maintain.
-
-## measurement interval
-
-```cpp
-const unsigned long CHECK_EVERY_MS = 6UL * 60 * 60 * 1000;
-```
-
-the default configuration checks the soil every 6 hours.
-
-change this value if you want the system to check more or less frequently.
-
-# alert behavior
-
-the system prevents repeated email notifications while the soil remains below the configured threshold.
-
-after an alert is sent, `alertSentThisCycle` prevents another alert from being sent during subsequent checks.
-
-the alert state is reset when the moisture level reaches at least 10 points above the configured threshold:
-
-```cpp
-if (pct >= ALERT_BELOW_PCT + 10) {
-    alertSentThisCycle = false;
-}
-```
-
-this allows another alert to be sent if the soil dries again after being watered.
-
-# wi-fi configuration
-
-the esp32-c3 connects to wi-fi using the credentials stored in `secrets.h`.
-
-the esp32-c3 requires a 2.4 ghz wi-fi network.
-
-if using an iphone hotspot, enable `maximize compatibility` so the hotspot provides 2.4 ghz compatibility.
-
-if the wi-fi connection fails, the device continues running and attempts to reconnect when needed.
-
-# running the main program
-
-1. create `secrets.h` in the same directory as `main.ino`.
-2. add your wi-fi and email credentials to `secrets.h`.
-3. open [`main.ino`](main/main.ino).
-4. connect the esp32-c3 to your computer.
-5. select `esp32c3 dev module` in arduino ide.
-6. select the correct usb serial port.
-7. click `upload`.
-8. open the serial monitor at `115200` baud.
-9. the esp32 will connect to wi-fi and immediately take its first moisture measurement.
-10. after that, it will check the moisture level at the configured interval.
-11. when the moisture level falls below the configured threshold, an email alert will be sent.
-
-example serial monitor output:
-
-```text
-connecting to wi-fi.... connected!
-ip address: 192.168.x.x
-moisture: 18%
-plant monitor ready.
-```
-
-# project structure
-
-```text
-.
-├── assets/
-│   ├── connections.JPG
-│   └── image.png
-├── main/
-│   └── main.ino
-├── moisture_calibrator/
-│   └── moisture_calibrator.ino
-├── .gitignore
-└── README.md
-```
-
-* `main/main.ino` — main moisture monitoring and email alert program
-* `moisture_calibrator/moisture_calibrator.ino` — calibration program for reading raw sensor values
-* `assets/` — wiring and project images
-* `.gitignore` — prevents files such as `secrets.h` and `.ds_store` from being committed
-
-# results
-
-i tested the system with my succulents using a 6-hour measurement interval.
-
-the esp32 successfully measured soil moisture and sent an email notification when the normalized moisture level dropped below the configured threshold.
-
-# limitations
-
-* moisture readings depend on the sensor, soil, and sensor placement.
-* calibration values may need to be changed for different sensors or growing conditions.
-* the normalized moisture value is relative to the calibration points and is not a direct measurement of volumetric water content.
-* the current implementation monitors soil moisture but does not automatically water the plant.
-* the esp32-c3 requires a 2.4 ghz wi-fi connection.
-* the current version is intended as a hobby-scale plant monitoring system.
-
-# future improvements
-
-the original idea was to turn this into an automatic watering system.
-
-possible improvements include:
-
-* add a mini water pump for automatic watering
-* control the pump using a mosfet or suitable motor driver
-* add a water reservoir and tubing
-* add battery-powered operation
-* add persistent moisture data logging
-* add a dashboard for viewing moisture measurements over time
-
-# acknowledgements
-
-huge thanks to mr. terry, who provided me with all the materials for this hobby project.
-
-now my summer succulents can survive without me (still needs someone to water them :p)
+* a reading near `DRY_VALUE`
