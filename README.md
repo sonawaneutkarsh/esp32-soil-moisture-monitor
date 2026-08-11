@@ -2,21 +2,32 @@
 
 a small hobby electronics project using an esp32-c3 super mini and a capacitive soil moisture sensor to monitor the moisture level of a plant.
 
-the esp32 takes multiple sensor readings, averages them, converts the calibrated reading into a 0–100% moisture value, and checks it against a configurable threshold. if the moisture level falls below the threshold, the esp32 sends an email notification over wi-fi.
+the esp32 takes multiple sensor readings, averages them, converts the calibrated reading into a normalized 0–100 moisture scale, and checks it against a configurable threshold. if the moisture level falls below the threshold, the esp32 sends an email notification over wi-fi.
 
 # features
 
 * capacitive soil moisture sensing
 * sensor calibration using dry and wet reference values
 * 10-sample averaging for each measurement
-* moisture values mapped to a 0–100% scale
+* normalized 0–100 moisture scale
 * configurable moisture threshold
 * configurable measurement interval
 * wi-fi connectivity
 * gmail email notifications
 * prevents repeated alerts while the soil remains dry
 * resets the alert state after the soil recovers
+* immediate measurement after startup
 * esp32-c3 based
+
+# technologies
+
+* c++
+* arduino ide
+* esp32-c3
+* wi-fi
+* smtp
+* gmail
+* capacitive analog sensing
 
 # how it works
 
@@ -25,12 +36,15 @@ the capacitive soil moisture sensor outputs an analog signal to gpio1 on the esp
 the system works in the following steps:
 
 1. the esp32 takes 10 analog readings from the sensor.
-2. the readings are averaged to reduce measurement variation.
+2. the readings are averaged to reduce short-term sensor variation.
 3. the averaged raw adc value is mapped between the calibrated dry and wet values.
-4. the resulting value is constrained to a 0–100% moisture scale.
+4. the resulting value is constrained to a normalized 0–100 scale.
 5. the moisture value is compared against `ALERT_BELOW_PCT`.
 6. if the moisture level is below the threshold, the esp32 sends an email alert.
-7. after an alert is sent, another alert is not sent until the moisture level recovers sufficiently.
+7. after an alert is sent, another alert is not sent until the soil recovers sufficiently.
+8. the first measurement is taken immediately after startup, followed by measurements at the configured interval.
+
+the 0–100 value is a relative scale based on the sensor's calibration points. it is not a direct measurement of volumetric water content.
 
 # hardware requirements
 
@@ -93,7 +107,19 @@ the main program uses the following values:
 
 these values are stored in `secrets.h`.
 
-`secrets.h` is included in `.gitignore` and should not be committed to the repository.
+create `secrets.h` in the same directory as `main.ino`:
+
+```cpp
+#define WIFI_SSID "your_wifi_name"
+#define WIFI_PASSWORD "your_wifi_password"
+
+#define SENDER_EMAIL "your_sender@gmail.com"
+#define SENDER_APP_PASS "your_gmail_app_password"
+
+#define RECIPIENT_EMAIL "recipient@gmail.com"
+```
+
+`secrets.h` is included in `.gitignore` and should never be committed to the repository.
 
 # wiring
 
@@ -129,7 +155,7 @@ the circuit can be powered using the barrel jack and a compatible wall adapter. 
 
 the repository contains a separate calibration program at [`moisture_calibrator.ino`](moisture_calibrator/moisture_calibrator.ino).
 
-the calibration program continuously prints the raw adc reading from the sensor.
+the calibration sketch continuously prints the raw adc reading from the sensor. it does not automatically calculate or save calibration values; the readings are recorded manually and then entered into `main.ino`.
 
 1. open `moisture_calibrator.ino` in arduino ide.
 2. connect the esp32-c3 to your computer.
@@ -169,8 +195,8 @@ the result is constrained between 0 and 100.
 
 this means:
 
-* a reading near `DRY_VALUE` corresponds to approximately 0%
-* a reading near `WET_VALUE` corresponds to approximately 100%
+* a reading near `DRY_VALUE` corresponds to approximately 0 on the normalized scale
+* a reading near `WET_VALUE` corresponds to approximately 100 on the normalized scale
 * readings between them are mapped proportionally
 
 # configuration
@@ -183,9 +209,9 @@ the main settings can be changed in `main.ino`.
 const int ALERT_BELOW_PCT = 15;
 ```
 
-the esp32 sends an email alert when the calculated moisture level falls below this value.
+the esp32 sends an email alert when the normalized moisture value falls below this threshold.
 
-for my succulents, i used a threshold of 15 based on the calibration results and the moisture level i wanted to maintain.
+for my succulents, i used a threshold of 15 based on my calibration results and the moisture level i wanted to maintain.
 
 ## measurement interval
 
@@ -203,7 +229,7 @@ the system prevents repeated email notifications while the soil remains below th
 
 after an alert is sent, `alertSentThisCycle` prevents another alert from being sent during subsequent checks.
 
-the alert state is reset when the moisture level reaches at least 10 percentage points above the configured threshold:
+the alert state is reset when the moisture level reaches at least 10 points above the configured threshold:
 
 ```cpp
 if (pct >= ALERT_BELOW_PCT + 10) {
@@ -221,23 +247,29 @@ the esp32-c3 requires a 2.4 ghz wi-fi network.
 
 if using an iphone hotspot, enable `maximize compatibility` so the hotspot provides 2.4 ghz compatibility.
 
+if the wi-fi connection fails, the device continues running and attempts to reconnect when needed.
+
 # running the main program
 
-1. open [`main.ino`](main/main.ino).
-2. make sure your `secrets.h` file is configured.
-3. connect the esp32-c3 to your computer.
-4. select `esp32c3 dev module` in arduino ide.
-5. select the correct usb serial port.
-6. click `upload`.
-7. open the serial monitor at `115200` baud.
-8. the esp32 will connect to wi-fi and periodically print the current moisture level.
-9. when the moisture level falls below the configured threshold, an email alert will be sent.
+1. create `secrets.h` in the same directory as `main.ino`.
+2. add your wi-fi and email credentials to `secrets.h`.
+3. open [`main.ino`](main/main.ino).
+4. connect the esp32-c3 to your computer.
+5. select `esp32c3 dev module` in arduino ide.
+6. select the correct usb serial port.
+7. click `upload`.
+8. open the serial monitor at `115200` baud.
+9. the esp32 will connect to wi-fi and immediately take its first moisture measurement.
+10. after that, it will check the moisture level at the configured interval.
+11. when the moisture level falls below the configured threshold, an email alert will be sent.
 
 example serial monitor output:
 
 ```text
 connecting to wi-fi.... connected!
+ip address: 192.168.x.x
 moisture: 18%
+plant monitor ready.
 ```
 
 # project structure
@@ -258,20 +290,19 @@ moisture: 18%
 * `main/main.ino` — main moisture monitoring and email alert program
 * `moisture_calibrator/moisture_calibrator.ino` — calibration program for reading raw sensor values
 * `assets/` — wiring and project images
-* `.gitignore` — excludes files such as `secrets.h` and `.ds_store`
+* `.gitignore` — prevents files such as `secrets.h` and `.ds_store` from being committed
 
 # results
 
 i tested the system with my succulents using a 6-hour measurement interval.
 
-the esp32 successfully measured the soil moisture and sent an email notification when the calculated moisture level dropped below the configured threshold.
-
-add screenshots of the serial monitor and email notification here if you have them.
+the esp32 successfully measured soil moisture and sent an email notification when the normalized moisture level dropped below the configured threshold.
 
 # limitations
 
 * moisture readings depend on the sensor, soil, and sensor placement.
 * calibration values may need to be changed for different sensors or growing conditions.
+* the normalized moisture value is relative to the calibration points and is not a direct measurement of volumetric water content.
 * the current implementation monitors soil moisture but does not automatically water the plant.
 * the esp32-c3 requires a 2.4 ghz wi-fi connection.
 * the current version is intended as a hobby-scale plant monitoring system.
