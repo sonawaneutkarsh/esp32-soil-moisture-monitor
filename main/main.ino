@@ -6,91 +6,76 @@
 #include <WiFi.h>
 #include <ESP_Mail_Client.h>
 
-// ── sensor configuration ──────────────────────────────────
-
+// sensor configuration
 const int MOISTURE_PIN = 1;
 
 // calibrate these values using moisture_calibrator.ino
 const int DRY_VALUE = 3890;
 const int WET_VALUE = 1410;
 
-// ── alert configuration ───────────────────────────────────
-
+// alert configuration
 const int ALERT_BELOW_PCT = 15;
+const int RECOVERY_HYSTERESIS_PCT = 10;
 
 // check the sensor every 6 hours
 const unsigned long CHECK_EVERY_MS = 6UL * 60 * 60 * 1000;
 
-// ── runtime state ──────────────────────────────────────────
-
+// runtime state
 bool alertSentThisCycle = false;
 unsigned long lastCheck = 0;
 
 SMTPSession smtp;
 
-// ── sensor functions ──────────────────────────────────────
-
-int readMoisturePct()
-{
+// sensor functions
+int readMoisturePct() {
   long sum = 0;
 
   // average 10 readings to reduce short-term sensor variation
-  for (int i = 0; i < 10; i++)
-  {
+  for (int i = 0; i < 10; i++) {
     sum += analogRead(MOISTURE_PIN);
     delay(10);
   }
 
   int raw = sum / 10;
 
-  // convert the calibrated raw value to a normalized 0–100 scale
-  return constrain(
-      map(raw, DRY_VALUE, WET_VALUE, 0, 100),
-      0,
-      100);
+  // convert the calibrated raw value to a normalized 0-100 scale
+  // DRY_VALUE > WET_VALUE, so we calculate manually instead of using map()
+  int pct = (int) ((float)(raw - DRY_VALUE) * 100.0f / (WET_VALUE - DRY_VALUE));
+  return constrain(pct, 0, 100);
 }
 
-// ── wi-fi functions ────────────────────────────────────────
-
-void connectWiFi()
-{
-  if (WiFi.status() == WL_CONNECTED)
-  {
-    return;
+// wi-fi functions
+bool connectWiFi() {
+  if (WiFi.status() == WL_CONNECTED) {
+    return true;
   }
 
   WiFi.mode(WIFI_STA);
   WiFi.setHostname("ESP32");
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  WiFi.setTxPower(WIFI_POWER_8_5dBm);
 
   Serial.print("connecting to wi-fi");
 
   int tries = 0;
-
-  while (WiFi.status() != WL_CONNECTED && tries < 60)
-  {
+  while (WiFi.status() != WL_CONNECTED && tries < 60) {
     delay(500);
     Serial.print(".");
     tries++;
   }
 
-  if (WiFi.status() == WL_CONNECTED)
-  {
+  if (WiFi.status() == WL_CONNECTED) {
     Serial.println(" connected!");
     Serial.print("ip address: ");
     Serial.println(WiFi.localIP());
-  }
-  else
-  {
+    return true;
+  } else {
     Serial.println(" failed");
+    return false;
   }
 }
 
-// ── email functions ────────────────────────────────────────
-
-void sendAlert(int pct)
-{
+// email functions
+void sendAlert(int pct) {
   Serial.println("sending email alert...");
 
   ESP_Mail_Session session;
@@ -119,18 +104,14 @@ void sendAlert(int pct)
 
   message.text.content = body;
 
-  if (!smtp.connect(&session))
-  {
+  if (!smtp.connect(&session)) {
     Serial.println("smtp connection failed: " + smtp.errorReason());
     return;
   }
 
-  if (!MailClient.sendMail(&smtp, &message))
-  {
+  if (!MailClient.sendMail(&smtp, &message)) {
     Serial.println("email failed: " + smtp.errorReason());
-  }
-  else
-  {
+  } else {
     Serial.println("alert sent!");
     alertSentThisCycle = true;
   }
@@ -138,36 +119,27 @@ void sendAlert(int pct)
   smtp.closeSession();
 }
 
-// ── measurement ────────────────────────────────────────────
-
-void checkMoisture()
-{
+// measurement
+void checkMoisture() {
   int pct = readMoisturePct();
 
   Serial.printf("moisture: %d%%\n", pct);
 
-  if (pct < ALERT_BELOW_PCT && !alertSentThisCycle)
-  {
-    if (WiFi.status() != WL_CONNECTED)
-    {
+  if (pct < ALERT_BELOW_PCT && !alertSentThisCycle) {
+    if (WiFi.status() != WL_CONNECTED) {
       connectWiFi();
     }
 
-    if (WiFi.status() == WL_CONNECTED)
-    {
+    if (WiFi.status() == WL_CONNECTED) {
       sendAlert(pct);
-    }
-    else
-    {
+    } else {
       Serial.println("cannot send alert because wi-fi is unavailable");
     }
   }
 
   // reset the alert state after the soil recovers
-  if (pct >= ALERT_BELOW_PCT + 10)
-  {
-    if (alertSentThisCycle)
-    {
+  if (pct >= ALERT_BELOW_PCT + RECOVERY_HYSTERESIS_PCT) {
+    if (alertSentThisCycle) {
       Serial.println("soil recovered - alert flag reset.");
     }
 
@@ -175,10 +147,8 @@ void checkMoisture()
   }
 }
 
-// ── setup ──────────────────────────────────────────────────
-
-void setup()
-{
+// setup
+void setup() {
   Serial.begin(115200);
 
   analogReadResolution(12);
@@ -194,18 +164,14 @@ void setup()
   Serial.println("plant monitor ready.");
 }
 
-// ── loop ──────────────────────────────────────────────────
-
-void loop()
-{
+// loop
+void loop() {
   unsigned long now = millis();
 
-  if (now - lastCheck >= CHECK_EVERY_MS)
-  {
+  if (now - lastCheck >= CHECK_EVERY_MS) {
     lastCheck = now;
 
-    if (WiFi.status() != WL_CONNECTED)
-    {
+    if (WiFi.status() != WL_CONNECTED) {
       connectWiFi();
     }
 
