@@ -81,10 +81,11 @@ https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32
 
 4. go to `tools` → `board` → `boards manager`.
 5. search for `esp32`.
-6. install `esp32 by espressif systems`.
+6. install `esp32 by espressif systems` (tested with version 3.3.12).
 7. go to `tools` → `board` → `esp32 arduino` and select `esp32c3 dev module`.
-8. connect the esp32-c3 to your computer.
-9. go to `tools` → `port` and select the usb serial port corresponding to the connected esp32.
+8. go to `tools` → `partition scheme` and select `huge app (3mb no ota/1mb spiffs)`. with current library versions the main sketch is slightly larger than the default 1.2 mb app partition, so the default scheme fails with "text section exceeds available space in board".
+9. connect the esp32-c3 to your computer.
+10. go to `tools` → `port` and select the usb serial port corresponding to the connected esp32.
 
 # email setup
 
@@ -93,7 +94,7 @@ the project uses the `esp mail client` library by mobizt to send email notificat
 1. open arduino ide.
 2. go to `sketch` → `include library` → `manage libraries`.
 3. search for `esp mail client`.
-4. install `esp mail client by mobizt`.
+4. install `esp mail client by mobizt` (tested with version 3.4.24).
 
 ## email credentials
 
@@ -107,7 +108,7 @@ the main program uses the following values:
 
 these values are stored in `secrets.h`.
 
-create `secrets.h` in the same directory as `main.ino`:
+create `secrets.h` in the same directory as `main.ino` (you can copy [`main/secrets.example.h`](main/secrets.example.h)):
 
 ```cpp
 #define WIFI_SSID "your_wifi_name"
@@ -185,14 +186,152 @@ for (int i = 0; i < 10; i++) {
 }
 ```
 
-the averaged raw value is then mapped between `DRY_VALUE` and `WET_VALUE`:
+the averaged raw value is then scaled between `DRY_VALUE` and `WET_VALUE`. `DRY_VALUE` is larger than `WET_VALUE` (the sensor reads lower when wet), so the firmware calculates the value with a float formula instead of arduino's integer `map()`:
 
 ```cpp
-map(raw, DRY_VALUE, WET_VALUE, 0, 100)
+int pct = (int) ((float)(raw - DRY_VALUE) * 100.0f / (WET_VALUE - DRY_VALUE));
+return constrain(pct, 0, 100);
 ```
 
 the result is constrained between 0 and 100.
 
 this means:
 
-* a reading near `DRY_VALUE`
+* a reading near `DRY_VALUE` corresponds to approximately 0 on the normalized scale
+* a reading near `WET_VALUE` corresponds to approximately 100 on the normalized scale
+* readings between them are mapped proportionally
+
+# configuration
+
+the main settings can be changed in `main.ino`.
+
+## moisture threshold
+
+```cpp
+const int ALERT_BELOW_PCT = 15;
+```
+
+the esp32 sends an email alert when the normalized moisture value falls below this threshold.
+
+for my succulents, i used a threshold of 15 based on my calibration results and the moisture level i wanted to maintain.
+
+## measurement interval
+
+```cpp
+const unsigned long CHECK_EVERY_MS = 6UL * 60 * 60 * 1000;
+```
+
+the default configuration checks the soil every 6 hours.
+
+change this value if you want the system to check more or less frequently.
+
+# alert behavior
+
+the system prevents repeated email notifications while the soil remains below the configured threshold.
+
+after an alert is sent, `alertSentThisCycle` prevents another alert from being sent during subsequent checks.
+
+the alert state is reset when the moisture level reaches at least `RECOVERY_HYSTERESIS_PCT` (default 10) points above the configured threshold:
+
+```cpp
+const int RECOVERY_HYSTERESIS_PCT = 10;
+
+if (pct >= ALERT_BELOW_PCT + RECOVERY_HYSTERESIS_PCT) {
+    alertSentThisCycle = false;
+}
+```
+
+this allows another alert to be sent if the soil dries again after being watered.
+
+# wi-fi configuration
+
+the esp32-c3 connects to wi-fi using the credentials stored in `secrets.h`.
+
+the esp32-c3 requires a 2.4 ghz wi-fi network.
+
+if using an iphone hotspot, enable `maximize compatibility` so the hotspot provides 2.4 ghz compatibility.
+
+if the wi-fi connection fails, the device continues running and attempts to reconnect when needed.
+
+# running the main program
+
+1. create `secrets.h` in the same directory as `main.ino`.
+2. add your wi-fi and email credentials to `secrets.h`.
+3. open [`main.ino`](main/main.ino).
+4. connect the esp32-c3 to your computer.
+5. select `esp32c3 dev module` in arduino ide.
+6. set `tools` → `partition scheme` to `huge app (3mb no ota/1mb spiffs)`.
+7. select the correct usb serial port.
+8. click `upload`.
+9. open the serial monitor at `115200` baud.
+10. the esp32 will connect to wi-fi and immediately take its first moisture measurement.
+11. after that, it will check the moisture level at the configured interval.
+12. when the moisture level falls below the configured threshold, an email alert will be sent.
+
+example serial monitor output:
+
+```text
+connecting to wi-fi.... connected!
+ip address: 192.168.x.x
+moisture: 18%
+plant monitor ready.
+```
+
+# project structure
+
+```text
+.
+├── assets/
+│   ├── connections.JPG
+│   └── image.png
+├── main/
+│   ├── main.ino
+│   └── secrets.example.h
+├── moisture_calibrator/
+│   └── moisture_calibrator.ino
+├── .github/workflows/build.yml
+├── .gitignore
+├── LICENSE
+└── README.md
+```
+
+* `main/main.ino` — main moisture monitoring and email alert program
+* `moisture_calibrator/moisture_calibrator.ino` — calibration program for reading raw sensor values
+* `main/secrets.example.h` — template for `secrets.h`
+* `assets/` — wiring and project images
+* `.github/workflows/build.yml` — compiles both sketches for the esp32-c3 on every push
+* `.gitignore` — prevents files such as `secrets.h` and `.ds_store` from being committed
+
+# results
+
+i tested the system with my succulents using a 6-hour measurement interval.
+
+the esp32 successfully measured soil moisture and sent an email notification when the normalized moisture level dropped below the configured threshold.
+
+# limitations
+
+* moisture readings depend on the sensor, soil, and sensor placement.
+* calibration values may need to be changed for different sensors or growing conditions.
+* the normalized moisture value is relative to the calibration points and is not a direct measurement of volumetric water content.
+* the current implementation monitors soil moisture but does not automatically water the plant.
+* the esp32-c3 requires a 2.4 ghz wi-fi connection.
+* the current version is intended as a hobby-scale plant monitoring system.
+
+# future improvements
+
+the original idea was to turn this into an automatic watering system.
+
+possible improvements include:
+
+* add a mini water pump for automatic watering
+* control the pump using a mosfet or suitable motor driver
+* add a water reservoir and tubing
+* add battery-powered operation
+* add persistent moisture data logging
+* add a dashboard for viewing moisture measurements over time
+
+# acknowledgements
+
+huge thanks to mr. terry, who provided me with all the materials for this hobby project.
+
+now my summer succulents can survive without me (still needs someone to water them :p)

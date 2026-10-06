@@ -1,0 +1,39 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compile:
+    name: compile sketches (esp32-c3, huge app partition)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: use placeholder secrets
+        run: cp main/secrets.example.h main/secrets.h
+
+      - uses: arduino/compile-sketches@v1
+        with:
+          fqbn: esp32:esp32:esp32c3:PartitionScheme=huge_app
+          platforms: |
+            - name: esp32:esp32
+              source-url: https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+              version: 3.3.12
+          libraries: |
+            - name: ESP Mail Client
+              version: 3.4.24
+          sketch-paths: |
+            - main
+            - moisture_calibrator
+          enable-warnings-report: false
